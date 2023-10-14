@@ -1,4 +1,5 @@
-export interface ITransform
-{
+module gameengine.engine.components {
+    export interface ITransform {
 
+    }
 }

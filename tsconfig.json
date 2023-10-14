@@ -1,11 +1,15 @@
 {
   "compilerOptions": {
     "module": "system",
-    "target": "es5",
+    "target": "es6",
     "sourceMap": true,
-    "outFile": "build/lib.js"
+    "outFile": "build/lib.js",
+    "declaration": true,
+    "experimentalDecorators": true,
+    "removeComments": true
   },
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "build"
   ]
 }
