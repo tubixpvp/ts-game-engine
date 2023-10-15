@@ -1,3 +1,3 @@
 # ts-game-engine
-Simple core for game engine on TypeScript based on ThreeJS.
+Simple game engine core based on ThreeJS written on TypeScript.
 Uses GameObject and Component system
