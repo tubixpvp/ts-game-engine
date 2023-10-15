@@ -65,6 +65,10 @@ module gameengine.engine.components {
             if (transform3 == null) {
                 transform3 = gameObject.addComponent(Transform3D);
             }
+            else if(transform3.getObject3D() != null)
+            {
+                throw new Error("Using more than one ThreeJS Object3D in one Transform3D is not allowed");
+            }
             transform3.setObject3D(object3d);
         }
     }
