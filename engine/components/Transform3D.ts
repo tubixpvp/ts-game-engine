@@ -22,6 +22,14 @@ module gameengine.engine.components {
         }
 
         /**
+         * Create new ThreeJS Object3D and link Transform3D to it
+         */
+        public setNewObject3D() : void
+        {
+            this.setObject3D(new Object3D());
+        }
+
+        /**
          * Get ThreeJS Object3D that linked to this Transform3D
          * @return {Object3D}
          */

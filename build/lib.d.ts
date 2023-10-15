@@ -89,31 +89,6 @@ declare module gameengine.engine.components {
     interface ITransform {
     }
 }
-declare module gameengine.engine.components {
-    import Component = gameengine.components.Component;
-    import Vector2 = THREE.Vector2;
-    class Transform2D extends Component implements ITransform {
-        readonly position: Vector2;
-        readonly rotation: Vector2;
-    }
-}
-declare module gameengine.engine.components {
-    import Component = gameengine.components.Component;
-    import IGameObject = gameengine.gameObject.IGameObject;
-    import Vector3 = THREE.Vector3;
-    import Object3D = THREE.Object3D;
-    class Transform3D extends Component implements ITransform {
-        readonly position: Vector3;
-        readonly rotation: Vector3;
-        private object3d;
-        setObject3D(object3d: Object3D): void;
-        getObject3D(): Object3D;
-        static getTransformFromObject3D(object3d: Object3D): Transform3D;
-        update(deltaMs: number): void;
-        onParentChanged(): void;
-        static init(gameObject: IGameObject, object3d: Object3D): void;
-    }
-}
 declare module gameengine.gameObject {
     import Component = gameengine.components.Component;
     interface IGameObject {
@@ -142,5 +117,68 @@ declare module gameengine.gameObject {
         removeChild(gameObject: IGameObject): void;
         hasChild(gameObject: IGameObject): boolean;
         get parent(): IGameObject;
+    }
+}
+declare module gameengine.engine.components {
+    import Component = gameengine.components.Component;
+    import IGameObject = gameengine.gameObject.IGameObject;
+    import Vector3 = THREE.Vector3;
+    import Object3D = THREE.Object3D;
+    class Transform3D extends Component implements ITransform {
+        readonly position: Vector3;
+        readonly rotation: Vector3;
+        private object3d;
+        setObject3D(object3d: Object3D): void;
+        setNewObject3D(): void;
+        getObject3D(): Object3D;
+        static getTransformFromObject3D(object3d: Object3D): Transform3D;
+        update(deltaMs: number): void;
+        onParentChanged(): void;
+        static init(gameObject: IGameObject, object3d: Object3D): void;
+    }
+}
+declare module gameengine.engine.material {
+    abstract class Material {
+        abstract get material(): THREE.Material | THREE.Material[];
+    }
+}
+declare module gameengine.engine.material {
+    class TextureMaterial extends Material {
+        static readonly MESH_BASIC: string;
+        private readonly _type;
+        private readonly _texture;
+        private readonly _material;
+        constructor(type: string, data: HTMLImageElement);
+        get material(): THREE.Material | THREE.Material[];
+    }
+}
+declare module gameengine.engine.components {
+    import Component = gameengine.components.Component;
+    import IGameObject = gameengine.gameObject.IGameObject;
+    import Material = gameengine.engine.material.Material;
+    class MeshRenderer extends Component {
+        private static readonly DUMMY_MATERIAL;
+        private _mesh;
+        private _geometry;
+        private _material;
+        attached(gameObject: IGameObject): void;
+        get material(): Material;
+        set material(value: Material);
+    }
+}
+declare module gameengine.engine.components {
+    import Component = gameengine.components.Component;
+    import Vector2 = THREE.Vector2;
+    class Transform2D extends Component implements ITransform {
+        readonly position: Vector2;
+        readonly rotation: Vector2;
+    }
+}
+type int = number;
+declare const int: (value: any) => number;
+declare module gameengine.engine.resources {
+    import IGameObject = gameengine.gameObject.IGameObject;
+    class MeshLoader {
+        static loadMesh(type: "fbx", url: string, callback: (meshObject: IGameObject) => void): void;
     }
 }

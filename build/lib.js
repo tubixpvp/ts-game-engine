@@ -283,26 +283,8 @@ var gameengine;
         var components;
         (function (components) {
             var Component = gameengine.components.Component;
-            var Vector2 = THREE.Vector2;
-            class Transform2D extends Component {
-                constructor() {
-                    super(...arguments);
-                    this.position = new Vector2();
-                    this.rotation = new Vector2();
-                }
-            }
-            components.Transform2D = Transform2D;
-        })(components = engine.components || (engine.components = {}));
-    })(engine = gameengine.engine || (gameengine.engine = {}));
-})(gameengine || (gameengine = {}));
-var gameengine;
-(function (gameengine) {
-    var engine;
-    (function (engine) {
-        var components;
-        (function (components) {
-            var Component = gameengine.components.Component;
             var Vector3 = THREE.Vector3;
+            var Object3D = THREE.Object3D;
             class Transform3D extends Component {
                 constructor() {
                     super(...arguments);
@@ -313,6 +295,9 @@ var gameengine;
                     this.object3d = object3d;
                     this.object3d.userData = this;
                     this.onParentChanged();
+                }
+                setNewObject3D() {
+                    this.setObject3D(new Object3D());
                 }
                 getObject3D() {
                     return this.object3d;
@@ -347,6 +332,119 @@ var gameengine;
             }
             components.Transform3D = Transform3D;
         })(components = engine.components || (engine.components = {}));
+    })(engine = gameengine.engine || (gameengine.engine = {}));
+})(gameengine || (gameengine = {}));
+var gameengine;
+(function (gameengine) {
+    var engine;
+    (function (engine) {
+        var material;
+        (function (material) {
+            class Material {
+            }
+            material.Material = Material;
+        })(material = engine.material || (engine.material = {}));
+    })(engine = gameengine.engine || (gameengine.engine = {}));
+})(gameengine || (gameengine = {}));
+var gameengine;
+(function (gameengine) {
+    var engine;
+    (function (engine) {
+        var material;
+        (function (material) {
+            class TextureMaterial extends material.Material {
+                constructor(type, data) {
+                    super();
+                    this._type = type;
+                    this._texture = new THREE.Texture();
+                    this._texture.image = data;
+                    if (type == TextureMaterial.MESH_BASIC) {
+                        const meshBasicMaterial = new THREE.MeshBasicMaterial();
+                        this._material = meshBasicMaterial;
+                        meshBasicMaterial.map = this._texture;
+                    }
+                    else {
+                        throw new Error("unsupported type: " + type);
+                    }
+                }
+                get material() {
+                    return this._material;
+                }
+            }
+            TextureMaterial.MESH_BASIC = "meshBasic";
+            material.TextureMaterial = TextureMaterial;
+        })(material = engine.material || (engine.material = {}));
+    })(engine = gameengine.engine || (gameengine.engine = {}));
+})(gameengine || (gameengine = {}));
+var gameengine;
+(function (gameengine) {
+    var engine;
+    (function (engine) {
+        var components;
+        (function (components) {
+            var Component = gameengine.components.Component;
+            var Mesh = THREE.Mesh;
+            var BufferGeometry = THREE.BufferGeometry;
+            var TextureMaterial = gameengine.engine.material.TextureMaterial;
+            class MeshRenderer extends Component {
+                attached(gameObject) {
+                    this._geometry = new BufferGeometry();
+                    this._mesh = new Mesh(this._geometry);
+                    this.material = MeshRenderer.DUMMY_MATERIAL;
+                    components.Transform3D.init(gameObject, this._mesh);
+                }
+                get material() {
+                    return this._material;
+                }
+                set material(value) {
+                    this._material = value;
+                    this._mesh.material = value.material;
+                }
+            }
+            MeshRenderer.DUMMY_MATERIAL = new TextureMaterial(TextureMaterial.MESH_BASIC, new Image(1, 1));
+            components.MeshRenderer = MeshRenderer;
+        })(components = engine.components || (engine.components = {}));
+    })(engine = gameengine.engine || (gameengine.engine = {}));
+})(gameengine || (gameengine = {}));
+var gameengine;
+(function (gameengine) {
+    var engine;
+    (function (engine) {
+        var components;
+        (function (components) {
+            var Component = gameengine.components.Component;
+            var Vector2 = THREE.Vector2;
+            class Transform2D extends Component {
+                constructor() {
+                    super(...arguments);
+                    this.position = new Vector2();
+                    this.rotation = new Vector2();
+                }
+            }
+            components.Transform2D = Transform2D;
+        })(components = engine.components || (engine.components = {}));
+    })(engine = gameengine.engine || (gameengine.engine = {}));
+})(gameengine || (gameengine = {}));
+const int = (value) => {
+    return Math.floor(Number(value));
+};
+var gameengine;
+(function (gameengine) {
+    var engine;
+    (function (engine) {
+        var resources;
+        (function (resources) {
+            var GameObject = gameengine.gameObject.GameObject;
+            var MeshRenderer = gameengine.engine.components.MeshRenderer;
+            class MeshLoader {
+                static loadMesh(type, url, callback) {
+                    const meshObject = new GameObject();
+                    const meshRenderer = meshObject.addComponent(MeshRenderer);
+                    callback(meshObject);
+                }
+            }
+            resources.MeshLoader = MeshLoader;
+        })(resources = engine.resources || (engine.resources = {}));
     })(engine = gameengine.engine || (gameengine.engine = {}));
 })(gameengine || (gameengine = {}));
 //# sourceMappingURL=lib.js.map
