@@ -1,6 +1,7 @@
 ///<reference path="../gameObject/GameObject.ts"/>
 module gameengine.scenes {
     import GameObject = gameengine.gameObject.GameObject;
+    import Scene = THREE.Scene;
 
     export class GameScene extends GameObject {
         /**
@@ -23,13 +24,13 @@ module gameengine.scenes {
         //last enterFrame() call time
         private _lastUpdateTime: number = 0;
 
-        private readonly _scene: THREE.Scene = new THREE.Scene();
+        private readonly _scene: Scene = new Scene();
 
         /**
          * Get ThreeJS Scene instance used in GameScene
-         * @return {THREE.Scene}
+         * @return {Scene}
          */
-        public getScene3D(): THREE.Scene {
+        public getScene3D(): Scene {
             return this._scene;
         }
 

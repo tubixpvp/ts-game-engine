@@ -4,5 +4,7 @@ module gameengine.engine.material
     {
 
         public abstract get material():THREE.Material | THREE.Material[];
+
+        public abstract dispose() : void;
     }
 }
