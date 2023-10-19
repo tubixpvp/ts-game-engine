@@ -11,10 +11,15 @@ module gameengine.engine.material
 
         private _material:THREE.Material;
 
-        public constructor(type:string, data:HTMLImageElement) {
+        public constructor(type:string, data:HTMLImageElement | THREE.Texture) {
             super();
             this._type = type;
-            this._texture = new THREE.Texture(data);
+            if(data instanceof HTMLImageElement) {
+                this._texture = new THREE.Texture(data);
+            }
+            else {
+                this._texture = data.clone();
+            }
 
             if(type == TextureMaterial.MESH_BASIC)
             {
@@ -27,6 +32,7 @@ module gameengine.engine.material
                 throw new Error("unsupported type: " + type);
             }
         }
+
 
         public override dispose() : void
         {

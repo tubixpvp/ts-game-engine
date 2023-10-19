@@ -70,6 +70,11 @@ module gameengine.engine.components {
             this._camera.far = value;
         }
 
+        public get canvas() : HTMLCanvasElement
+        {
+            return this._renderer.domElement;
+        }
+
         public updateAspect(height: number, width: number): void {
             this._camera.aspect = height / width;
             this._camera.updateProjectionMatrix();

@@ -30,6 +30,12 @@ module gameengine.engine.components
             Transform3D.init(gameObject, this._mesh);
         }
 
+        public initGeometry(geometry:BufferGeometry) : void
+        {
+            this._geometry.copy(geometry);
+            this._geometry.computeVertexNormals();
+        }
+
         public get material() : Material
         {
             return this._material;

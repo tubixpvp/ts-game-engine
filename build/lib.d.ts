@@ -52,6 +52,7 @@ declare module gameengine.gameObject {
 }
 declare module gameengine.scenes {
     import GameObject = gameengine.gameObject.GameObject;
+    import Scene = THREE.Scene;
     class GameScene extends GameObject {
         static get currentScene(): GameScene;
         private static _currentScene;
@@ -59,7 +60,7 @@ declare module gameengine.scenes {
         private _enterFrameBind;
         private _lastUpdateTime;
         private readonly _scene;
-        getScene3D(): THREE.Scene;
+        getScene3D(): Scene;
         start(): void;
         stop(): void;
         private enterFrame;
@@ -82,6 +83,7 @@ declare module gameengine.engine.components {
         set nearDistance(value: number);
         get farDistance(): number;
         set farDistance(value: number);
+        get canvas(): HTMLCanvasElement;
         updateAspect(height: number, width: number): void;
     }
 }
@@ -140,21 +142,24 @@ declare module gameengine.engine.components {
 declare module gameengine.engine.material {
     abstract class Material {
         abstract get material(): THREE.Material | THREE.Material[];
+        abstract dispose(): void;
     }
 }
 declare module gameengine.engine.material {
     class TextureMaterial extends Material {
         static readonly MESH_BASIC: string;
-        private readonly _type;
-        private readonly _texture;
-        private readonly _material;
-        constructor(type: string, data: HTMLImageElement);
+        private _type;
+        private _texture;
+        private _material;
+        constructor(type: string, data: HTMLImageElement | THREE.Texture);
+        dispose(): void;
         get material(): THREE.Material | THREE.Material[];
     }
 }
 declare module gameengine.engine.components {
     import Component = gameengine.components.Component;
     import IGameObject = gameengine.gameObject.IGameObject;
+    import BufferGeometry = THREE.BufferGeometry;
     import Material = gameengine.engine.material.Material;
     class MeshRenderer extends Component {
         private static readonly DUMMY_MATERIAL;
@@ -162,6 +167,7 @@ declare module gameengine.engine.components {
         private _geometry;
         private _material;
         attached(gameObject: IGameObject): void;
+        initGeometry(geometry: BufferGeometry): void;
         get material(): Material;
         set material(value: Material);
     }
@@ -174,11 +180,55 @@ declare module gameengine.engine.components {
         readonly rotation: Vector2;
     }
 }
-type int = number;
-declare const int: (value: any) => number;
+declare module gameengine.engine.resources {
+    import Mesh = THREE.Mesh;
+    import Object3D = THREE.Object3D;
+    class Parser3DS {
+        private objectDatas;
+        private animationDatas;
+        private materialDatas;
+        private objects;
+        private parents;
+        private materials;
+        private textureMaterials;
+        private data;
+        private dataView;
+        constructor();
+        load(url: string, onLoad: (objects: Object3D[]) => void, onProgress?: (data: (ProgressEvent<EventTarget>)) => void, onError?: (error: unknown) => void): void;
+        parse(data: any): Mesh[];
+        private parse3DSChunk;
+        private readChunkInfo;
+        private parseMainChunk;
+        private parse3DChunk;
+        private parseMaterialChunk;
+        private parseMaterialName;
+        private getString;
+        private parseMapChunk;
+        private parseObject;
+        private parseObjectChunk;
+        private parseMeshChunk;
+        private parseVertices;
+        private parseUVs;
+        private parseMatrix;
+        private parseFaces;
+        private parseFacesChunk;
+        private parseSurface;
+        private parseSmoothingGroups;
+        private parseAnimationChunk;
+        private parseObjectAnimationChunk;
+        private getRotationFrom3DSAngleAxis;
+        private buildContent;
+        private buildMesh;
+    }
+}
 declare module gameengine.engine.resources {
     import IGameObject = gameengine.gameObject.IGameObject;
     class MeshLoader {
-        static loadMesh(type: "fbx", url: string, callback: (meshObject: IGameObject) => void): void;
+        private static readonly parser3ds;
+        static loadMesh(type: "3ds", url: string, callback: (meshObject: IGameObject) => void): void;
+        private static onObjectsLoaded;
+        private static onError;
     }
 }
+type int = number;
+declare const int: (value: any) => number;
