@@ -1091,21 +1091,46 @@ var gameengine;
         (function (resources) {
             var GameObject = gameengine.gameObject.GameObject;
             var MeshRenderer = gameengine.engine.components.MeshRenderer;
+            var Mesh = THREE.Mesh;
+            var ObjectLoader = THREE.ObjectLoader;
             class MeshLoader {
                 static loadMesh(type, url, callback) {
                     const meshObject = new GameObject();
-                    const meshRenderer = meshObject.addComponent(MeshRenderer);
                     switch (type) {
                         case "3ds":
-                            this.parser3ds.load(url, (objects) => this.onObjectsLoaded(objects, meshRenderer), undefined, this.onError);
+                            this.parser3ds.load(url, (objects) => this.onObjectsLoaded(objects, meshObject, callback), undefined, this.onError);
+                            break;
+                        default:
+                            this.objectLoader.load(url, (object) => this.onObjectsLoaded([object], meshObject, callback));
                             break;
                     }
-                    callback(meshObject);
                 }
-                static onObjectsLoaded(objects, meshRenderer) {
-                    const mesh = objects[0];
-                    console.log(mesh);
-                    console.log(mesh.geometry);
+                static onObjectsLoaded(objects, gameObject, callback) {
+                    let mainReady = false;
+                    for (let object of objects) {
+                        if (object instanceof Mesh) {
+                            if (!mainReady) {
+                                this.createMeshRendererFromMesh3D(gameObject, object);
+                            }
+                            else {
+                                this.createChildGameObjectFromMesh(gameObject, object);
+                            }
+                        }
+                        object.traverse((child) => {
+                            if (child != object && child instanceof Mesh) {
+                                this.createChildGameObjectFromMesh(gameObject, child);
+                            }
+                        });
+                    }
+                    callback(gameObject);
+                }
+                static createChildGameObjectFromMesh(parentObject, mesh) {
+                    const childObject = new GameObject();
+                    parentObject.addChild(childObject);
+                    this.createMeshRendererFromMesh3D(childObject, mesh);
+                }
+                static createMeshRendererFromMesh3D(object3d, mesh) {
+                    const meshRenderer = object3d.addComponent(MeshRenderer);
                     meshRenderer.initGeometry(mesh.geometry);
                 }
                 static onError(error) {
@@ -1113,6 +1138,7 @@ var gameengine;
                 }
             }
             MeshLoader.parser3ds = new resources.Parser3DS();
+            MeshLoader.objectLoader = new ObjectLoader();
             resources.MeshLoader = MeshLoader;
         })(resources = engine.resources || (engine.resources = {}));
     })(engine = gameengine.engine || (gameengine.engine = {}));

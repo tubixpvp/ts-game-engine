@@ -1,4 +1,4 @@
-declare module gameengine.components {
+declare namespace gameengine.components {
     import IGameObject = gameengine.gameObject.IGameObject;
     abstract class Component {
         private _gameObject;
@@ -11,7 +11,7 @@ declare module gameengine.components {
         onParentChanged(): void;
     }
 }
-declare module gameengine.gameObject {
+declare namespace gameengine.gameObject {
     import Component = gameengine.components.Component;
     class GameObject implements IGameObject {
         private readonly _components;
@@ -50,7 +50,7 @@ declare module gameengine.gameObject {
         sceneUpdate(deltaMs: number): void;
     }
 }
-declare module gameengine.scenes {
+declare namespace gameengine.scenes {
     import GameObject = gameengine.gameObject.GameObject;
     import Scene = THREE.Scene;
     class GameScene extends GameObject {
@@ -66,7 +66,7 @@ declare module gameengine.scenes {
         private enterFrame;
     }
 }
-declare module gameengine.engine.components {
+declare namespace gameengine.engine.components {
     import Component = gameengine.components.Component;
     import IGameObject = gameengine.gameObject.IGameObject;
     class Camera3D extends Component {
@@ -87,11 +87,11 @@ declare module gameengine.engine.components {
         updateAspect(height: number, width: number): void;
     }
 }
-declare module gameengine.engine.components {
+declare namespace gameengine.engine.components {
     interface ITransform {
     }
 }
-declare module gameengine.gameObject {
+declare namespace gameengine.gameObject {
     import Component = gameengine.components.Component;
     interface IGameObject {
         addComponent<T extends Component>(type: {
@@ -121,7 +121,7 @@ declare module gameengine.gameObject {
         get parent(): IGameObject;
     }
 }
-declare module gameengine.engine.components {
+declare namespace gameengine.engine.components {
     import Component = gameengine.components.Component;
     import IGameObject = gameengine.gameObject.IGameObject;
     import Vector3 = THREE.Vector3;
@@ -139,13 +139,13 @@ declare module gameengine.engine.components {
         static init(gameObject: IGameObject, object3d: Object3D): void;
     }
 }
-declare module gameengine.engine.material {
+declare namespace gameengine.engine.material {
     abstract class Material {
         abstract get material(): THREE.Material | THREE.Material[];
         abstract dispose(): void;
     }
 }
-declare module gameengine.engine.material {
+declare namespace gameengine.engine.material {
     class TextureMaterial extends Material {
         static readonly MESH_BASIC: string;
         private _type;
@@ -156,7 +156,7 @@ declare module gameengine.engine.material {
         get material(): THREE.Material | THREE.Material[];
     }
 }
-declare module gameengine.engine.components {
+declare namespace gameengine.engine.components {
     import Component = gameengine.components.Component;
     import IGameObject = gameengine.gameObject.IGameObject;
     import BufferGeometry = THREE.BufferGeometry;
@@ -172,7 +172,7 @@ declare module gameengine.engine.components {
         set material(value: Material);
     }
 }
-declare module gameengine.engine.components {
+declare namespace gameengine.engine.components {
     import Component = gameengine.components.Component;
     import Vector2 = THREE.Vector2;
     class Transform2D extends Component implements ITransform {
@@ -180,7 +180,7 @@ declare module gameengine.engine.components {
         readonly rotation: Vector2;
     }
 }
-declare module gameengine.engine.resources {
+declare namespace gameengine.engine.resources {
     import Mesh = THREE.Mesh;
     import Object3D = THREE.Object3D;
     class Parser3DS {
@@ -221,12 +221,15 @@ declare module gameengine.engine.resources {
         private buildMesh;
     }
 }
-declare module gameengine.engine.resources {
+declare namespace gameengine.engine.resources {
     import IGameObject = gameengine.gameObject.IGameObject;
     class MeshLoader {
         private static readonly parser3ds;
-        static loadMesh(type: "3ds", url: string, callback: (meshObject: IGameObject) => void): void;
+        private static readonly objectLoader;
+        static loadMesh(type: "3ds" | "fbx", url: string, callback: (meshObject: IGameObject) => void): void;
         private static onObjectsLoaded;
+        private static createChildGameObjectFromMesh;
+        private static createMeshRendererFromMesh3D;
         private static onError;
     }
 }
