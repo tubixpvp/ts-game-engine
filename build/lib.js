@@ -3,6 +3,7 @@ var gameengine;
     var components;
     (function (components) {
         class Component {
+            _gameObject;
             get gameObject() {
                 return this._gameObject;
             }
@@ -31,13 +32,11 @@ var gameengine;
     var gameObject;
     (function (gameObject_1) {
         class GameObject {
-            constructor() {
-                this._components = new Array();
-                this._newComponents = new Array();
-                this._children = new Array();
-                this._parent = null;
-                this._enabled = true;
-            }
+            _components = new Array();
+            _newComponents = new Array();
+            _children = new Array();
+            _parent = null;
+            _enabled = true;
             get enabled() {
                 return this._enabled;
             }
@@ -148,6 +147,9 @@ var gameengine;
                 for (let component of this._components) {
                     component.update(deltaMs);
                 }
+                for (let child of this._children) {
+                    child.sceneUpdate(deltaMs);
+                }
             }
         }
         gameObject_1.GameObject = GameObject;
@@ -160,16 +162,14 @@ var gameengine;
         var GameObject = gameengine.gameObject.GameObject;
         var Scene = THREE.Scene;
         class GameScene extends GameObject {
-            constructor() {
-                super(...arguments);
-                this._running = false;
-                this._enterFrameBind = this.enterFrame.bind(this);
-                this._lastUpdateTime = 0;
-                this._scene = new Scene();
-            }
             static get currentScene() {
                 return this._currentScene;
             }
+            static _currentScene = null;
+            _running = false;
+            _enterFrameBind = this.enterFrame.bind(this);
+            _lastUpdateTime = 0;
+            _scene = new Scene();
             getScene3D() {
                 return this._scene;
             }
@@ -206,7 +206,6 @@ var gameengine;
                 requestAnimationFrame(this._enterFrameBind);
             }
         }
-        GameScene._currentScene = null;
         scenes.GameScene = GameScene;
     })(scenes = gameengine.scenes || (gameengine.scenes = {}));
 })(gameengine || (gameengine = {}));
@@ -222,10 +221,9 @@ var gameengine;
             var PerspectiveCamera = THREE.PerspectiveCamera;
             var Vector2 = THREE.Vector2;
             class Camera3D extends Component {
-                constructor() {
-                    super(...arguments);
-                    this._lastDomSize = new Vector2();
-                }
+                _renderer;
+                _camera;
+                _lastDomSize = new Vector2();
                 attached(gameObject) {
                     this._renderer = new WebGLRenderer({ antialias: true });
                     this._camera = new PerspectiveCamera(60, 1, 1, 100000);
@@ -290,14 +288,16 @@ var gameengine;
             var Vector3 = THREE.Vector3;
             var Object3D = THREE.Object3D;
             class Transform3D extends Component {
-                constructor() {
-                    super(...arguments);
-                    this.position = new Vector3();
-                    this.rotation = new Vector3();
-                }
+                position = new Vector3();
+                rotation = new Vector3();
+                object3d;
                 setObject3D(object3d) {
                     this.object3d = object3d;
                     this.object3d.userData = this;
+                    this.position.copy(object3d.position);
+                    this.rotation.x = object3d.rotation.x;
+                    this.rotation.y = object3d.rotation.y;
+                    this.rotation.z = object3d.rotation.z;
                     this.onParentChanged();
                 }
                 setNewObject3D() {
@@ -360,6 +360,10 @@ var gameengine;
         var material;
         (function (material) {
             class TextureMaterial extends material.Material {
+                static MESH_BASIC = "meshBasic";
+                _type;
+                _texture;
+                _material;
                 constructor(type, data) {
                     super();
                     this._type = type;
@@ -389,7 +393,6 @@ var gameengine;
                     return this._material;
                 }
             }
-            TextureMaterial.MESH_BASIC = "meshBasic";
             material.TextureMaterial = TextureMaterial;
         })(material = engine.material || (engine.material = {}));
     })(engine = gameengine.engine || (gameengine.engine = {}));
@@ -405,6 +408,10 @@ var gameengine;
             var BufferGeometry = THREE.BufferGeometry;
             var TextureMaterial = gameengine.engine.material.TextureMaterial;
             class MeshRenderer extends Component {
+                static DUMMY_MATERIAL = new TextureMaterial(TextureMaterial.MESH_BASIC, new Image(1, 1));
+                _mesh;
+                _geometry;
+                _material;
                 attached(gameObject) {
                     this._geometry = new BufferGeometry();
                     this._mesh = new Mesh(this._geometry);
@@ -423,7 +430,6 @@ var gameengine;
                     this._mesh.material = value.material;
                 }
             }
-            MeshRenderer.DUMMY_MATERIAL = new TextureMaterial(TextureMaterial.MESH_BASIC, new Image(1, 1));
             components.MeshRenderer = MeshRenderer;
         })(components = engine.components || (engine.components = {}));
     })(engine = gameengine.engine || (gameengine.engine = {}));
@@ -437,11 +443,8 @@ var gameengine;
             var Component = gameengine.components.Component;
             var Vector2 = THREE.Vector2;
             class Transform2D extends Component {
-                constructor() {
-                    super(...arguments);
-                    this.position = new Vector2();
-                    this.rotation = new Vector2();
-                }
+                position = new Vector2();
+                rotation = new Vector2();
             }
             components.Transform2D = Transform2D;
         })(components = engine.components || (engine.components = {}));
@@ -453,633 +456,758 @@ var gameengine;
     (function (engine) {
         var resources;
         (function (resources) {
+            var Loader = THREE.Loader;
+            var LoaderUtils = THREE.LoaderUtils;
             var FileLoader = THREE.FileLoader;
-            var Vector3 = THREE.Vector3;
+            var Group = THREE.Group;
+            var Float32BufferAttribute = THREE.Float32BufferAttribute;
+            var Euler = THREE.Euler;
             var Mesh = THREE.Mesh;
-            const CHUNK_MAIN = 19789;
-            const CHUNK_VERSION = 2;
-            const CHUNK_SCENE = 15677;
-            const CHUNK_ANIMATION = 45056;
-            const CHUNK_OBJECT = 16384;
-            const CHUNK_TRIMESH = 16640;
-            const CHUNK_VERTICES = 16656;
-            const CHUNK_FACES = 16672;
-            const CHUNK_FACESMATERIAL = 16688;
-            const CHUNK_FACESSMOOTH = 16720;
-            const CHUNK_MAPPINGCOORDS = 16704;
-            const CHUNK_TRANSFORMATION = 16736;
-            const CHUNK_MATERIAL = 45055;
-            function bytesAvailable(data) {
-                return data.byteLength - data.position;
-            }
-            class Parser3DS {
-                constructor() {
-                    this.objectDatas = {};
-                    this.animationDatas = [];
-                    this.materialDatas = {};
-                    this.objects = [];
-                    this.parents = [];
+            var BufferGeometry = THREE.BufferGeometry;
+            var MeshPhongMaterial = THREE.MeshPhongMaterial;
+            var DoubleSide = THREE.DoubleSide;
+            var AdditiveBlending = THREE.AdditiveBlending;
+            var Texture = THREE.Texture;
+            var TextureLoader = THREE.TextureLoader;
+            var Color = THREE.Color;
+            const M3DMAGIC = 0x4D4D;
+            const MLIBMAGIC = 0x3DAA;
+            const CMAGIC = 0xC23D;
+            const M3D_VERSION = 0x0002;
+            const COLOR_F = 0x0010;
+            const COLOR_24 = 0x0011;
+            const LIN_COLOR_24 = 0x0012;
+            const LIN_COLOR_F = 0x0013;
+            const INT_PERCENTAGE = 0x0030;
+            const FLOAT_PERCENTAGE = 0x0031;
+            const MDATA = 0x3D3D;
+            const MESH_VERSION = 0x3D3E;
+            const MASTER_SCALE = 0x0100;
+            const MAT_ENTRY = 0xAFFF;
+            const MAT_NAME = 0xA000;
+            const MAT_AMBIENT = 0xA010;
+            const MAT_DIFFUSE = 0xA020;
+            const MAT_SPECULAR = 0xA030;
+            const MAT_SHININESS = 0xA040;
+            const MAT_TRANSPARENCY = 0xA050;
+            const MAT_TWO_SIDE = 0xA081;
+            const MAT_ADDITIVE = 0xA083;
+            const MAT_WIRE = 0xA085;
+            const MAT_WIRE_SIZE = 0xA087;
+            const MAT_TEXMAP = 0xA200;
+            const MAT_OPACMAP = 0xA210;
+            const MAT_BUMPMAP = 0xA230;
+            const MAT_SPECMAP = 0xA204;
+            const MAT_MAPNAME = 0xA300;
+            const MAT_MAP_USCALE = 0xA354;
+            const MAT_MAP_VSCALE = 0xA356;
+            const MAT_MAP_UOFFSET = 0xA358;
+            const MAT_MAP_VOFFSET = 0xA35A;
+            const NAMED_OBJECT = 0x4000;
+            const N_TRI_OBJECT = 0x4100;
+            const POINT_ARRAY = 0x4110;
+            const FACE_ARRAY = 0x4120;
+            const MSH_MAT_GROUP = 0x4130;
+            const TEX_VERTS = 0x4140;
+            const MESH_MATRIX = 0x4160;
+            const KFDATA = 0xB000;
+            const OBJECT_NODE_TAG = 0xB002;
+            const NODE_HDR = 0xB010;
+            const PIVOT = 0xB013;
+            const INSTANCE_NAME = 0xB011;
+            const POS_TRACK_TAG = 0xB020;
+            const ROT_TRACK_TAG = 0xB021;
+            const SCL_TRACK_TAG = 0xB022;
+            class Loader3DS extends Loader {
+                debug;
+                group;
+                materials;
+                _3DSObjectsByName;
+                constructor(debug = false, manager = undefined) {
+                    super(manager);
+                    this.debug = debug;
+                    this.group = null;
                     this.materials = [];
-                    this.textureMaterials = [];
+                    this._3DSObjectsByName = {};
                 }
                 load(url, onLoad, onProgress, onError) {
-                    const loader = new FileLoader();
+                    const scope = this;
+                    const path = (this.path === '') ? LoaderUtils.extractUrlBase(url) : this.path;
+                    const loader = new FileLoader(this.manager);
+                    loader.setPath(this.path);
                     loader.setResponseType('arraybuffer');
-                    loader.load(url, data => {
-                        onLoad(this.parse(data));
-                    }, onProgress, onError);
-                }
-                parse(data) {
-                    data.position = 0;
-                    if (bytesAvailable(data) < 6)
-                        return;
-                    this.data = data;
-                    this.dataView = new DataView(data);
-                    this.parse3DSChunk(data.position, bytesAvailable(data));
-                    this.objects = [];
-                    this.parents = [];
-                    this.materials = [];
-                    this.textureMaterials = [];
-                    this.buildContent();
-                    data = null;
-                    this.objectDatas = null;
-                    this.animationDatas = null;
-                    this.materialDatas = null;
-                    return this.objects;
-                }
-                parse3DSChunk(dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    this.data.position = dataPosition;
-                    switch (chunkInfo.id) {
-                        case CHUNK_MAIN:
-                            this.parseMainChunk(chunkInfo.dataPosition, chunkInfo.dataSize);
-                    }
-                    this.parse3DSChunk(chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                readChunkInfo(dataPosition) {
-                    this.data.position = dataPosition;
-                    const chunkInfo = {};
-                    chunkInfo.id = this.dataView.getUint16(this.data.position, true);
-                    this.data.position += 2;
-                    chunkInfo.size = this.dataView.getUint32(this.data.position, true);
-                    this.data.position += 4;
-                    chunkInfo.dataSize = chunkInfo.size - 6;
-                    chunkInfo.dataPosition = this.data.position;
-                    chunkInfo.nextChunkPosition = dataPosition + chunkInfo.size;
-                    return chunkInfo;
-                }
-                parseMainChunk(dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case CHUNK_VERSION:
-                            break;
-                        case CHUNK_SCENE:
-                            this.parse3DChunk(chunkInfo.dataPosition, chunkInfo.dataSize);
-                            break;
-                        case CHUNK_ANIMATION:
-                            this.parseAnimationChunk(chunkInfo.dataPosition, chunkInfo.dataSize);
-                    }
-                    this.parseMainChunk(chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                parse3DChunk(dataPosition, bytesAvailable) {
-                    let chunkInfo;
-                    let material;
-                    while (bytesAvailable >= 6) {
-                        chunkInfo = this.readChunkInfo(dataPosition);
-                        switch (chunkInfo.id) {
-                            case CHUNK_MATERIAL:
-                                material = {};
-                                this.parseMaterialChunk(material, chunkInfo.dataPosition, chunkInfo.dataSize);
-                                break;
-                            case CHUNK_OBJECT:
-                                this.parseObject(chunkInfo);
+                    loader.setRequestHeader(this.requestHeader);
+                    loader.setWithCredentials(this.withCredentials);
+                    loader.load(url, function (data) {
+                        try {
+                            onLoad(scope.parse(data, path));
                         }
-                        dataPosition = chunkInfo.nextChunkPosition;
-                        bytesAvailable = bytesAvailable - chunkInfo.size;
-                    }
-                }
-                parseMaterialChunk(material, dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case 40960:
-                            this.parseMaterialName(material);
-                            break;
-                        case 40992:
-                            this.data.position = chunkInfo.dataPosition + 6;
-                            material.color =
-                                (this.dataView.getUint8(this.data.position) << 16) +
-                                    (this.dataView.getUint8(this.data.position + 2) << 8) +
-                                    this.dataView.getUint8(this.data.position + 4);
-                            this.data.position += 6;
-                            break;
-                        case 41024:
-                            this.data.position = chunkInfo.dataPosition + 6;
-                            material.glossiness = this.dataView.getUint16(this.data.position, true);
-                            this.data.position += 2;
-                            break;
-                        case 41025:
-                            this.data.position = chunkInfo.dataPosition + 6;
-                            material.specular = this.dataView.getUint16(this.data.position, true);
-                            this.data.position += 2;
-                            break;
-                        case 41040:
-                            this.data.position = chunkInfo.dataPosition + 6;
-                            material.transparency = this.dataView.getUint16(this.data.position, true);
-                            this.data.position += 2;
-                            break;
-                        case 41472:
-                            material.diffuseMap = {
-                                scaleU: 1,
-                                scaleV: 1,
-                                offsetU: 0,
-                                offsetV: 0,
-                                rotation: 0
-                            };
-                            this.parseMapChunk(material.name, material.diffuseMap, chunkInfo.dataPosition, chunkInfo.dataSize);
-                            break;
-                        case 41488:
-                            material.opacityMap = {
-                                scaleU: 1,
-                                scaleV: 1,
-                                offsetU: 0,
-                                offsetV: 0,
-                                rotation: 0
-                            };
-                            this.parseMapChunk(material.name, material.opacityMap, chunkInfo.dataPosition, chunkInfo.dataSize);
-                            break;
-                        case 41504:
-                    }
-                    this.parseMaterialChunk(material, chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                parseMaterialName(material) {
-                    if (this.materialDatas == null)
-                        this.materialDatas = {};
-                    material.name = this.getString(this.data.position);
-                    this.materialDatas[material.name] = material;
-                }
-                getString(index) {
-                    let charCode = 0;
-                    this.data.position = index;
-                    let res = '';
-                    while (this.dataView.getInt8(this.data.position) !== 0) {
-                        charCode = this.dataView.getInt8(this.data.position);
-                        this.data.position++;
-                        res += String.fromCharCode(charCode);
-                    }
-                    this.data.position++;
-                    return res;
-                }
-                parseMapChunk(materialName, map, dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case 41728:
-                            map.filename = this.getString(chunkInfo.dataPosition).toLowerCase();
-                            break;
-                        case 41812:
-                            map.scaleU = this.dataView.getFloat32(this.data.position, true);
-                            this.data.position += 4;
-                            break;
-                        case 41814:
-                            map.scaleV = this.dataView.getFloat32(this.data.position, true);
-                            this.data.position += 4;
-                            break;
-                        case 41816:
-                            map.offsetU = this.dataView.getFloat32(this.data.position, true);
-                            this.data.position += 4;
-                            break;
-                        case 41818:
-                            map.offsetV = this.dataView.getFloat32(this.data.position, true);
-                            this.data.position += 4;
-                            break;
-                        case 41820:
-                            map.rotation = this.dataView.getFloat32(this.data.position, true);
-                            this.data.position += 4;
-                    }
-                    this.parseMapChunk(materialName, map, chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                parseObject(chunkInfo) {
-                    if (this.objectDatas == null)
-                        this.objectDatas = {};
-                    const object = {};
-                    object.name = this.getString(chunkInfo.dataPosition);
-                    this.objectDatas[object.name] = object;
-                    const offset = object.name.length + 1;
-                    this.parseObjectChunk(object, chunkInfo.dataPosition + offset, chunkInfo.dataSize - offset);
-                }
-                parseObjectChunk(object, dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case CHUNK_TRIMESH:
-                            this.parseMeshChunk(object, chunkInfo.dataPosition, chunkInfo.dataSize);
-                            break;
-                        case 18176:
-                    }
-                    this.parseObjectChunk(object, chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                parseMeshChunk(object, dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case CHUNK_VERTICES:
-                            this.parseVertices(object);
-                            break;
-                        case CHUNK_MAPPINGCOORDS:
-                            this.parseUVs(object);
-                            break;
-                        case CHUNK_TRANSFORMATION:
-                            this.parseMatrix(object);
-                            break;
-                        case CHUNK_FACES:
-                            this.parseFaces(object, chunkInfo);
-                    }
-                    this.parseMeshChunk(object, chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                parseVertices(object) {
-                    const num = this.dataView.getUint16(this.data.position, true);
-                    this.data.position += 2;
-                    object.vertices = new Float32Array(num * 3);
-                    let j = 0;
-                    for (let i = 0; i < num; i++) {
-                        object.vertices[j++] = this.dataView.getFloat32(this.data.position, true);
-                        this.data.position += 4;
-                        object.vertices[j++] = this.dataView.getFloat32(this.data.position, true);
-                        this.data.position += 4;
-                        object.vertices[j++] = this.dataView.getFloat32(this.data.position, true);
-                        this.data.position += 4;
-                    }
-                }
-                parseUVs(object) {
-                    const num = this.dataView.getUint16(this.data.position, true);
-                    this.data.position += 2;
-                    object.uvs = new Float32Array(num * 2);
-                    let j = 0;
-                    for (let i = 0; i < num; i++) {
-                        object.uvs[j++] = this.dataView.getFloat32(this.data.position, true);
-                        this.data.position += 4;
-                        object.uvs[j++] = this.dataView.getFloat32(this.data.position, true);
-                        this.data.position += 4;
-                    }
-                }
-                parseMatrix(object) {
-                    object.a = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.e = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.i = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.b = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.f = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.j = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.c = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.g = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.k = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.d = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.h = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                    object.l = this.dataView.getFloat32(this.data.position, true);
-                    this.data.position += 4;
-                }
-                parseFaces(object, chunkInfo) {
-                    const num = this.dataView.getUint16(this.data.position, true);
-                    this.data.position += 2;
-                    object.faces = [];
-                    object.smoothingGroups = [];
-                    let j = 0;
-                    for (let i = 0; i < num; i++) {
-                        object.faces[j++] = this.dataView.getUint16(this.data.position, true);
-                        this.data.position += 2;
-                        object.faces[j++] = this.dataView.getUint16(this.data.position, true);
-                        this.data.position += 2;
-                        object.faces[j++] = this.dataView.getUint16(this.data.position, true);
-                        this.data.position += 4;
-                    }
-                    const offset = 2 + 8 * num;
-                    this.parseFacesChunk(object, chunkInfo.dataPosition + offset, chunkInfo.dataSize - offset);
-                }
-                parseFacesChunk(object, dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case CHUNK_FACESMATERIAL:
-                            this.parseSurface(object);
-                            break;
-                        case CHUNK_FACESSMOOTH:
-                            this.parseSmoothingGroups(object);
-                    }
-                    this.parseFacesChunk(object, chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                parseSurface(object) {
-                    if (object.surfaces == null)
-                        object.surfaces = {};
-                    const surface = [];
-                    object.surfaces[this.getString(this.data.position)] = surface;
-                    const num = this.dataView.getUint16(this.data.position, true);
-                    this.data.position += 2;
-                    for (let i = 0; i < num; i++) {
-                        surface[i] = this.dataView.getUint16(this.data.position, true);
-                        this.data.position += 2;
-                    }
-                }
-                parseSmoothingGroups(object) {
-                    const len = object.faces.length / 3;
-                    for (let i = 0; i < len; i++) {
-                        object.smoothingGroups[i] = this.dataView.getUint32(this.data.position, true);
-                    }
-                }
-                parseAnimationChunk(dataPosition, bytesAvailable) {
-                    let chunkInfo;
-                    let animation;
-                    while (bytesAvailable >= 6) {
-                        chunkInfo = this.readChunkInfo(dataPosition);
-                        switch (chunkInfo.id) {
-                            case 45057:
-                            case 45058:
-                            case 45059:
-                            case 45060:
-                            case 45061:
-                            case 45062:
-                            case 45063:
-                                if (this.animationDatas == null) {
-                                    this.animationDatas = [];
-                                }
-                                animation = {};
-                                this.animationDatas.push(animation);
-                                this.parseObjectAnimationChunk(animation, chunkInfo.dataPosition, chunkInfo.dataSize);
-                                break;
-                            case 45064:
-                        }
-                        dataPosition = chunkInfo.nextChunkPosition;
-                        bytesAvailable = bytesAvailable - chunkInfo.size;
-                    }
-                }
-                parseObjectAnimationChunk(animation, dataPosition, bytesAvailable) {
-                    if (bytesAvailable < 6)
-                        return;
-                    const chunkInfo = this.readChunkInfo(dataPosition);
-                    switch (chunkInfo.id) {
-                        case 45072:
-                            animation.objectName = this.getString(this.data.position);
-                            this.data.position += 4;
-                            animation.parentIndex = this.dataView.getUint16(this.data.position, true);
-                            this.data.position += 2;
-                            break;
-                        case 45073:
-                            animation.objectName = this.getString(this.data.position);
-                            break;
-                        case 45075:
-                            animation.pivot = new THREE.Vector3(this.dataView.getFloat32(this.data.position, true), this.dataView.getFloat32(this.data.position + 4, true), this.dataView.getFloat32(this.data.position + 8, true));
-                            this.data.position += 12;
-                            break;
-                        case 45088:
-                            this.data.position = this.data.position + 20;
-                            animation.position = new THREE.Vector3(this.dataView.getFloat32(this.data.position, true), this.dataView.getFloat32(this.data.position + 4, true), this.dataView.getFloat32(this.data.position + 8, true));
-                            this.data.position += 12;
-                            break;
-                        case 45089:
-                            this.data.position = this.data.position + 20;
-                            animation.rotation = this.getRotationFrom3DSAngleAxis(this.dataView.getFloat32(this.data.position, true), this.dataView.getFloat32(this.data.position + 4, true), this.dataView.getFloat32(this.data.position + 8, true), this.dataView.getFloat32(this.data.position + 12, true));
-                            this.data.position += 16;
-                            break;
-                        case 45090:
-                            this.data.position = this.data.position + 20;
-                            animation.scale = new THREE.Vector3(this.dataView.getFloat32(this.data.position, true), this.dataView.getFloat32(this.data.position + 4, true), this.dataView.getFloat32(this.data.position + 8, true));
-                            this.data.position += 12;
-                    }
-                    this.parseObjectAnimationChunk(animation, chunkInfo.nextChunkPosition, bytesAvailable - chunkInfo.size);
-                }
-                getRotationFrom3DSAngleAxis(angle, x, z, y) {
-                    let half;
-                    const res = new Vector3();
-                    const s = Math.sin(angle);
-                    const c = Math.cos(angle);
-                    const t = 1 - c;
-                    const k = x * y * t + z * s;
-                    if (k >= 1) {
-                        half = angle / 2;
-                        res.z = -2 * Math.atan2(x * Math.sin(half), Math.cos(half));
-                        res.y = -Math.PI / 2;
-                        res.x = 0;
-                        return res;
-                    }
-                    if (k <= -1) {
-                        half = angle / 2;
-                        res.z = 2 * Math.atan2(x * Math.sin(half), Math.cos(half));
-                        res.y = Math.PI / 2;
-                        res.x = 0;
-                        return res;
-                    }
-                    res.z = -Math.atan2(y * s - x * z * t, 1 - (y * y + z * z) * t);
-                    res.y = -Math.asin(x * y * t + z * s);
-                    res.x = -Math.atan2(x * s - y * z * t, 1 - (x * x + z * z) * t);
-                    return res;
-                }
-                buildContent() {
-                    let objectName = null;
-                    let objectData = null;
-                    let object = null;
-                    let i = 0;
-                    let length = 0;
-                    let animationData = null;
-                    let j = 0;
-                    let nameCounter = 0;
-                    let animationData2 = null;
-                    let newObjectData = null;
-                    let newName = null;
-                    if (this.animationDatas[0] !== undefined) {
-                        if (this.objectDatas !== null) {
-                            length = this.animationDatas.length;
-                            for (i = 0; i < length; i++) {
-                                animationData = this.animationDatas[i];
-                                objectName = animationData.objectName;
-                                objectData = this.objectDatas[objectName];
-                                if (objectData !== null) {
-                                    for (j = i + 1, nameCounter = 1; j < length; j++) {
-                                        animationData2 = this.animationDatas[j];
-                                        if (!animationData2.isInstance && objectName == animationData2.objectName) {
-                                            newObjectData = {};
-                                            newName = objectName + nameCounter++;
-                                            newObjectData.name = newName;
-                                            this.objectDatas[newName] = newObjectData;
-                                            animationData2.objectName = newName;
-                                            newObjectData.vertices = objectData.vertices;
-                                            newObjectData.uvs = objectData.uvs;
-                                            newObjectData.faces = objectData.faces;
-                                            newObjectData.smoothingGroups = objectData.smoothingGroups;
-                                            newObjectData.surfaces = objectData.surfaces;
-                                            newObjectData.a = objectData.a;
-                                            newObjectData.b = objectData.b;
-                                            newObjectData.c = objectData.c;
-                                            newObjectData.d = objectData.d;
-                                            newObjectData.e = objectData.e;
-                                            newObjectData.f = objectData.f;
-                                            newObjectData.g = objectData.g;
-                                            newObjectData.h = objectData.h;
-                                            newObjectData.i = objectData.i;
-                                            newObjectData.j = objectData.j;
-                                            newObjectData.k = objectData.k;
-                                            newObjectData.l = objectData.l;
-                                        }
-                                    }
-                                }
-                                if (objectData !== null && objectData.vertices !== null) {
-                                    object = new Mesh();
-                                    this.buildMesh(object, objectData, animationData);
-                                }
-                                else {
-                                    object = new Mesh();
-                                }
-                                object.name = objectName;
-                                animationData.object = object;
-                                if (animationData.position !== null) {
-                                    object.position.x = animationData.position.x;
-                                    object.position.y = animationData.position.y;
-                                    object.position.z = animationData.position.z;
-                                }
-                                if (animationData.rotation !== null) {
-                                    object.rotation.x = animationData.rotation.x;
-                                    object.rotation.y = animationData.rotation.y;
-                                    object.rotation.z = animationData.rotation.z;
-                                }
-                                if (animationData.scale !== null) {
-                                    object.scale.x = animationData.scale.x;
-                                    object.scale.y = animationData.scale.y;
-                                    object.scale.z = animationData.scale.z;
-                                }
-                                this.objects.push(object);
-                            }
-                        }
-                    }
-                    else {
-                        for (objectName in this.objectDatas) {
-                            objectData = this.objectDatas[objectName];
-                            if (objectData.vertices !== null) {
-                                object = new Mesh();
-                                object.name = objectName;
-                                this.buildMesh(object, objectData, null);
-                                this.objects.push(object);
-                            }
-                        }
-                    }
-                }
-                buildMesh(mesh, objectData, animationData) {
-                    let geometry = new THREE.BufferGeometry();
-                    let material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                    mesh.geometry = geometry;
-                    mesh.material = material;
-                    let n = 0;
-                    let m = 0;
-                    let len = 0;
-                    let a;
-                    let b;
-                    let c;
-                    let d;
-                    let e;
-                    let f;
-                    let g;
-                    let h;
-                    let i;
-                    let j;
-                    let k;
-                    let l;
-                    let det;
-                    let x;
-                    let y;
-                    let z;
-                    let vertices = [];
-                    let uvs = [];
-                    let correct = false;
-                    if (animationData !== null) {
-                        a = objectData.a;
-                        b = objectData.b;
-                        c = objectData.c;
-                        d = objectData.d;
-                        e = objectData.e;
-                        f = objectData.f;
-                        g = objectData.g;
-                        h = objectData.h;
-                        i = objectData.i;
-                        j = objectData.j;
-                        k = objectData.k;
-                        l = objectData.l;
-                        det = 1 / (-c * f * i + b * g * i + c * e * j - a * g * j - b * e * k + a * f * k);
-                        objectData.a = (-g * j + f * k) * det;
-                        objectData.b = (c * j - b * k) * det;
-                        objectData.c = (-c * f + b * g) * det;
-                        objectData.d = (d * g * j - c * h * j - d * f * k + b * h * k + c * f * l - b * g * l) * det;
-                        objectData.e = (g * i - e * k) * det;
-                        objectData.f = (-c * i + a * k) * det;
-                        objectData.g = (c * e - a * g) * det;
-                        objectData.h = (c * h * i - d * g * i + d * e * k - a * h * k - c * e * l + a * g * l) * det;
-                        objectData.i = (-f * i + e * j) * det;
-                        objectData.j = (b * i - a * j) * det;
-                        objectData.k = (-b * e + a * f) * det;
-                        objectData.l = (d * f * i - b * h * i - d * e * j + a * h * j + b * e * l - a * f * l) * det;
-                        if (animationData.pivot !== null) {
-                            objectData.d = objectData.d - animationData.pivot.x;
-                            objectData.h = objectData.h - animationData.pivot.y;
-                            objectData.l = objectData.l - animationData.pivot.z;
-                        }
-                        correct = true;
-                    }
-                    if (objectData.vertices !== null) {
-                        n = 0;
-                        m = 0;
-                        len = objectData.vertices.length;
-                        while (n < len) {
-                            if (correct) {
-                                x = objectData.vertices[n++];
-                                y = objectData.vertices[n++];
-                                z = objectData.vertices[n++];
-                                vertices.push(objectData.a * x + objectData.b * y + objectData.c * z + objectData.d);
-                                vertices.push(objectData.e * x + objectData.f * y + objectData.g * z + objectData.h);
-                                vertices.push(objectData.i * x + objectData.j * y + objectData.k * z + objectData.l);
+                        catch (e) {
+                            if (onError) {
+                                onError(e);
                             }
                             else {
-                                vertices.push(objectData.vertices[n++]);
-                                vertices.push(objectData.vertices[n++]);
-                                vertices.push(objectData.vertices[n++]);
+                                console.error(e);
                             }
-                            if (objectData.uvs) {
-                                uvs.push(objectData.uvs[m++]);
-                                uvs.push(1 - objectData.uvs[m++]);
-                            }
+                            scope.manager.itemError(url);
                         }
-                        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-                    }
-                    if (objectData.faces !== null) {
-                        n = 0;
-                        m = 0;
-                        len = objectData.faces.length;
-                        let index = [];
-                        while (n < len) {
-                            index.push(objectData.faces[n++], objectData.faces[n++], objectData.faces[n++]);
-                            mesh.geometry.setIndex(index);
+                    }, onProgress, onError);
+                }
+                parse(arraybuffer, path) {
+                    this.group = new Group();
+                    this.materials = [];
+                    this._3DSObjectsByName = {};
+                    this.readFile(arraybuffer, path);
+                    let _3DSObjects = Object.values(this._3DSObjectsByName);
+                    for (let i = 0; i < _3DSObjects.length; i++) {
+                        if (_3DSObjects[i].containsAnimationData) {
+                            this.object3DSDataToThreejsMesh(_3DSObjects[i]);
                         }
                     }
-                    geometry.computeVertexNormals();
+                    this.debugMessage('Parsed ' + Object.values(this._3DSObjectsByName).length + ' meshes');
+                    return this.group;
+                }
+                readFile(arraybuffer, path) {
+                    const data = new DataView(arraybuffer);
+                    const chunk = new Chunk(data, 0, this.debugMessage);
+                    if (chunk.id === MLIBMAGIC || chunk.id === CMAGIC || chunk.id === M3DMAGIC) {
+                        let next = chunk.readChunk();
+                        while (next) {
+                            if (next.id === M3D_VERSION) {
+                                const version = next.readDWord();
+                                this.debugMessage('3DS file version: ' + version);
+                            }
+                            else if (next.id === MDATA) {
+                                this.readMeshData(next, path);
+                            }
+                            else if (next.id == KFDATA) {
+                                this.readAnimationData(next);
+                            }
+                            else {
+                                this.debugMessage('Unknown main chunk: ' + next.hexId);
+                            }
+                            next = chunk.readChunk();
+                        }
+                    }
+                }
+                object3DSDataToThreejsMesh(_3DSObject) {
+                    let geometryVertices = _3DSObject.geometryVertices;
+                    for (let i = 0; i < geometryVertices.length; i++) {
+                        this.correctMatrix(_3DSObject);
+                        let vertices = geometryVertices[i];
+                        let newVertices = [];
+                        for (let i = 0; i < vertices.length; i += 3) {
+                            const verticeX = vertices[i];
+                            const verticeY = vertices[i + 1];
+                            const verticeZ = vertices[i + 2];
+                            newVertices.push(_3DSObject.matrix.a * verticeX + _3DSObject.matrix.b * verticeY + _3DSObject.matrix.c * verticeZ + _3DSObject.matrix.d);
+                            newVertices.push(_3DSObject.matrix.i * verticeX + _3DSObject.matrix.j * verticeY + _3DSObject.matrix.k * verticeZ + _3DSObject.matrix.l);
+                            newVertices.push(-(_3DSObject.matrix.e * verticeX + _3DSObject.matrix.f * verticeY + _3DSObject.matrix.g * verticeZ + _3DSObject.matrix.h));
+                        }
+                        _3DSObject.geometry.setAttribute('position', new Float32BufferAttribute(newVertices, 3));
+                    }
+                    _3DSObject.geometry.computeVertexNormals();
+                    if (_3DSObject.parent_index != null) {
+                        _3DSObject.mesh.position.x = _3DSObject.position.x;
+                        _3DSObject.mesh.position.z = -_3DSObject.position.y;
+                        _3DSObject.mesh.position.y = _3DSObject.position.z;
+                        _3DSObject.mesh.scale.x = _3DSObject.scale.x;
+                        _3DSObject.mesh.scale.z = _3DSObject.scale.y;
+                        _3DSObject.mesh.scale.y = _3DSObject.scale.z;
+                        let euler = new Euler(_3DSObject.rotation.x, _3DSObject.rotation.z, _3DSObject.rotation.y, 'XYZ');
+                        _3DSObject.mesh.setRotationFromEuler(euler);
+                        let _3DSObjects = Object.values(this._3DSObjectsByName);
+                        let parentMesh = _3DSObjects[_3DSObject.parent_index].mesh;
+                        parentMesh.add(_3DSObject.mesh);
+                    }
+                    else {
+                        this.group.add(_3DSObject.mesh);
+                    }
+                }
+                correctMatrix(_3DSObject) {
+                    let a = _3DSObject.matrix.a;
+                    let b = _3DSObject.matrix.b;
+                    let c = _3DSObject.matrix.c;
+                    let d = _3DSObject.matrix.d;
+                    let e = _3DSObject.matrix.e;
+                    let f = _3DSObject.matrix.f;
+                    let g = _3DSObject.matrix.g;
+                    let h = _3DSObject.matrix.h;
+                    let i = _3DSObject.matrix.i;
+                    let j = _3DSObject.matrix.j;
+                    let k = _3DSObject.matrix.k;
+                    let l = _3DSObject.matrix.l;
+                    let det = 1 / (-c * f * i + b * g * i + c * e * j - a * g * j - b * e * k + a * f * k);
+                    _3DSObject.matrix.a = (-g * j + f * k) * det;
+                    _3DSObject.matrix.b = (c * j - b * k) * det;
+                    _3DSObject.matrix.c = (-c * f + b * g) * det;
+                    _3DSObject.matrix.d = (d * g * j - c * h * j - d * f * k + b * h * k + c * f * l - b * g * l) * det;
+                    _3DSObject.matrix.e = (g * i - e * k) * det;
+                    _3DSObject.matrix.f = (-c * i + a * k) * det;
+                    _3DSObject.matrix.g = (c * e - a * g) * det;
+                    _3DSObject.matrix.h = (c * h * i - d * g * i + d * e * k - a * h * k - c * e * l + a * g * l) * det;
+                    _3DSObject.matrix.i = (-f * i + e * j) * det;
+                    _3DSObject.matrix.j = (b * i - a * j) * det;
+                    _3DSObject.matrix.k = (-b * e + a * f) * det;
+                    _3DSObject.matrix.l = (d * f * i - b * h * i - d * e * j + a * h * j + b * e * l - a * f * l) * det;
+                    if (_3DSObject.pivot != null) {
+                        _3DSObject.matrix.d -= _3DSObject.pivot.x;
+                        _3DSObject.matrix.h -= _3DSObject.pivot.y;
+                        _3DSObject.matrix.l -= _3DSObject.pivot.z;
+                    }
+                }
+                readAnimationData(chunk) {
+                    let next = chunk.readChunk();
+                    while (next) {
+                        switch (next.id) {
+                            case 0xB001:
+                            case 0xB002:
+                            case 0xB003:
+                            case 0xB004:
+                            case 0xB005:
+                            case 0xB006:
+                            case 0xB007:
+                                this.readObjectNode(next);
+                                break;
+                            default:
+                                this.debugMessage('Unknown animation chunk: ' + next.hexId);
+                                break;
+                        }
+                        next = chunk.readChunk();
+                    }
+                }
+                readObjectNode(chunk) {
+                    let _3DSObject = null;
+                    let next = chunk.readChunk();
+                    while (next) {
+                        if (next.id == NODE_HDR) {
+                            _3DSObject = this.readObjectHierarchy(next);
+                        }
+                        else if (next.id == INSTANCE_NAME) {
+                            _3DSObject = this.readObjectName(next);
+                        }
+                        else if (next.id == PIVOT) {
+                            _3DSObject.pivot.x = next.readFloat();
+                            _3DSObject.pivot.y = next.readFloat();
+                            _3DSObject.pivot.z = next.readFloat();
+                        }
+                        else if (next.id == POS_TRACK_TAG) {
+                            next.position += 20;
+                            _3DSObject.position.x = next.readFloat();
+                            _3DSObject.position.y = next.readFloat();
+                            _3DSObject.position.z = next.readFloat();
+                        }
+                        else if (next.id == ROT_TRACK_TAG) {
+                            next.position += 20;
+                            _3DSObject.rotation.w = next.readFloat();
+                            _3DSObject.rotation.x = next.readFloat();
+                            _3DSObject.rotation.y = next.readFloat();
+                            _3DSObject.rotation.z = next.readFloat();
+                        }
+                        else if (next.id == SCL_TRACK_TAG) {
+                            next.position += 20;
+                            _3DSObject.scale.x = next.readFloat();
+                            _3DSObject.scale.y = next.readFloat();
+                            _3DSObject.scale.z = next.readFloat();
+                        }
+                        next = chunk.readChunk();
+                    }
+                }
+                readObjectHierarchy(chunk) {
+                    let objectName = chunk.readString();
+                    let _3DSObject = this._3DSObjectsByName[objectName];
+                    _3DSObject.containsAnimationData = true;
+                    chunk.position += 4;
+                    _3DSObject.parent_index = chunk.readShort();
+                    if (_3DSObject.parent_index == -1) {
+                        _3DSObject.parent_index = null;
+                    }
+                    return _3DSObject;
+                }
+                readObjectName(chunk) {
+                    let objectName = chunk.readString();
+                    let _3DSObject = this._3DSObjectsByName[objectName];
+                    _3DSObject.containsAnimationData = true;
+                    return _3DSObject;
+                }
+                readMeshData(chunk, path) {
+                    let next = chunk.readChunk();
+                    while (next) {
+                        if (next.id === MESH_VERSION) {
+                            const version = +next.readDWord();
+                            this.debugMessage('Mesh Version: ' + version);
+                        }
+                        else if (next.id === MASTER_SCALE) {
+                            const scale = next.readFloat() * 0.01;
+                            this.debugMessage('Master scale: ' + scale);
+                            this.group.scale.set(scale, scale, scale);
+                        }
+                        else if (next.id === NAMED_OBJECT) {
+                            this.debugMessage('Named Object');
+                            this.readNamedObject(next);
+                        }
+                        else if (next.id === MAT_ENTRY) {
+                            this.debugMessage('Material');
+                            this.readMaterialEntry(next, path);
+                        }
+                        else {
+                            this.debugMessage('Unknown MDATA chunk: ' + next.hexId);
+                        }
+                        next = chunk.readChunk();
+                    }
+                }
+                readNamedObject(chunk) {
+                    const name = chunk.readString();
+                    let next = chunk.readChunk();
+                    while (next) {
+                        if (next.id === N_TRI_OBJECT) {
+                            let new3DSObject = new Object3DS(name);
+                            const mesh = this.readMesh(next, new3DSObject);
+                            mesh.name = name;
+                            new3DSObject.mesh = mesh;
+                            this._3DSObjectsByName[name] = new3DSObject;
+                        }
+                        else {
+                            this.debugMessage('Unknown named object chunk: ' + next.hexId);
+                        }
+                        next = chunk.readChunk();
+                    }
+                }
+                readMaterialEntry(chunk, path) {
+                    let next = chunk.readChunk();
+                    const material = new MeshPhongMaterial();
+                    while (next) {
+                        if (next.id === MAT_NAME) {
+                            material.name = next.readString();
+                            this.debugMessage('   Name: ' + material.name);
+                        }
+                        else if (next.id === MAT_WIRE) {
+                            this.debugMessage('   Wireframe');
+                            material.wireframe = true;
+                        }
+                        else if (next.id === MAT_WIRE_SIZE) {
+                            const value = next.readByte();
+                            material.wireframeLinewidth = value;
+                            this.debugMessage('   Wireframe Thickness: ' + value);
+                        }
+                        else if (next.id === MAT_TWO_SIDE) {
+                            material.side = DoubleSide;
+                            this.debugMessage('   DoubleSided');
+                        }
+                        else if (next.id === MAT_ADDITIVE) {
+                            this.debugMessage('   Additive Blending');
+                            material.blending = AdditiveBlending;
+                        }
+                        else if (next.id === MAT_DIFFUSE) {
+                            this.debugMessage('   Diffuse Color');
+                            material.color = this.readColor(next);
+                        }
+                        else if (next.id === MAT_SPECULAR) {
+                            this.debugMessage('   Specular Color');
+                            material.specular = this.readColor(next);
+                        }
+                        else if (next.id === MAT_AMBIENT) {
+                            this.debugMessage('   Ambient color');
+                            material.color = this.readColor(next);
+                        }
+                        else if (next.id === MAT_SHININESS) {
+                            const shininess = this.readPercentage(next);
+                            material.shininess = shininess * 100;
+                            this.debugMessage('   Shininess : ' + shininess);
+                        }
+                        else if (next.id === MAT_TRANSPARENCY) {
+                            const transparency = this.readPercentage(next);
+                            material.opacity = 1 - transparency;
+                            this.debugMessage('  Transparency : ' + transparency);
+                            material.transparent = (material.opacity < 1);
+                        }
+                        else if (next.id === MAT_TEXMAP) {
+                            this.debugMessage('   ColorMap');
+                            material.map = this.readMap(next, path);
+                        }
+                        else if (next.id === MAT_BUMPMAP) {
+                            this.debugMessage('   BumpMap');
+                            material.bumpMap = this.readMap(next, path);
+                        }
+                        else if (next.id === MAT_OPACMAP) {
+                            this.debugMessage('   OpacityMap');
+                            material.alphaMap = this.readMap(next, path);
+                        }
+                        else if (next.id === MAT_SPECMAP) {
+                            this.debugMessage('   SpecularMap');
+                            material.specularMap = this.readMap(next, path);
+                        }
+                        else {
+                            this.debugMessage('   Unknown material chunk: ' + next.hexId);
+                        }
+                        next = chunk.readChunk();
+                    }
+                    this.materials[material.name] = material;
+                }
+                readMesh(chunk, _3DSObject) {
+                    let next = chunk.readChunk();
+                    const geometry = new BufferGeometry();
+                    const material = new MeshPhongMaterial();
+                    const mesh = new Mesh(geometry, material);
+                    mesh.name = 'mesh';
+                    _3DSObject.geometry = geometry;
+                    while (next) {
+                        if (next.id === POINT_ARRAY) {
+                            const points = next.readWord();
+                            this.debugMessage('   Vertex: ' + points);
+                            const vertices = [];
+                            for (let i = 0; i < points; i++) {
+                                vertices.push(next.readFloat());
+                                vertices.push(next.readFloat());
+                                vertices.push(next.readFloat());
+                            }
+                            _3DSObject.geometryVertices.push(vertices);
+                        }
+                        else if (next.id === FACE_ARRAY) {
+                            this.readFaceArray(next, mesh);
+                        }
+                        else if (next.id === TEX_VERTS) {
+                            const texels = next.readWord();
+                            this.debugMessage('   UV: ' + texels);
+                            const uvs = [];
+                            for (let i = 0; i < texels; i++) {
+                                uvs.push(next.readFloat());
+                                uvs.push(next.readFloat());
+                            }
+                            geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+                        }
+                        else if (next.id === MESH_MATRIX) {
+                            _3DSObject.matrix.a = next.readFloat();
+                            _3DSObject.matrix.e = next.readFloat();
+                            _3DSObject.matrix.i = next.readFloat();
+                            _3DSObject.matrix.b = next.readFloat();
+                            _3DSObject.matrix.f = next.readFloat();
+                            _3DSObject.matrix.j = next.readFloat();
+                            _3DSObject.matrix.c = next.readFloat();
+                            _3DSObject.matrix.g = next.readFloat();
+                            _3DSObject.matrix.k = next.readFloat();
+                            _3DSObject.matrix.d = next.readFloat();
+                            _3DSObject.matrix.h = next.readFloat();
+                            _3DSObject.matrix.l = next.readFloat();
+                        }
+                        else {
+                            this.debugMessage('   Unknown mesh chunk: ' + next.hexId);
+                        }
+                        next = chunk.readChunk();
+                    }
+                    return mesh;
+                }
+                readFaceArray(chunk, mesh) {
+                    const faces = chunk.readWord();
+                    this.debugMessage('   Faces: ' + faces);
+                    const indexes = [];
+                    for (let i = 0; i < faces; ++i) {
+                        indexes.push(chunk.readWord(), chunk.readWord(), chunk.readWord());
+                        chunk.readWord();
+                    }
+                    console.log("index count", indexes.length);
+                    let materialIndex = 0;
+                    let start = 0;
+                    let newIndexes = [];
+                    while (!chunk.endOfChunk) {
+                        const subchunk = chunk.readChunk();
+                        if (subchunk.id === MSH_MAT_GROUP) {
+                            this.debugMessage('      Material Group');
+                            const group = this.readMaterialGroup(subchunk);
+                            const groupIndexCount = group.index.length;
+                            console.log("jea", groupIndexCount);
+                            for (let i = 0; i < groupIndexCount; ++i) {
+                                const triangleIndex = group.index[i];
+                                newIndexes.push(indexes[triangleIndex * 3]);
+                                newIndexes.push(indexes[triangleIndex * 3 + 1]);
+                                newIndexes.push(indexes[triangleIndex * 3 + 2]);
+                                indexes[triangleIndex * 3] = null;
+                                indexes[triangleIndex * 3 + 1] = null;
+                                indexes[triangleIndex * 3 + 2] = null;
+                            }
+                            const count = groupIndexCount * 3;
+                            mesh.geometry.addGroup(start, count, materialIndex);
+                            start += count;
+                            materialIndex++;
+                            const material = this.materials[group.name];
+                            if (Array.isArray(mesh.material) === false)
+                                mesh.material = [];
+                            if (material !== undefined) {
+                                mesh.material.push(material);
+                            }
+                        }
+                        else {
+                            this.debugMessage('      Unknown face array chunk: ' + subchunk.hexId);
+                        }
+                    }
+                    for (let i = 0; i < indexes.length; ++i) {
+                        const index = indexes[i];
+                        if (index != null) {
+                            newIndexes.push(index);
+                        }
+                    }
+                    console.log(newIndexes);
+                    mesh.geometry.setIndex(newIndexes);
+                    if (mesh.material.length === 1)
+                        mesh.material = mesh.material[0];
+                }
+                readMap(chunk, path) {
+                    let next = chunk.readChunk();
+                    let texture = null;
+                    const loader = new TextureLoader(this.manager);
+                    loader.setPath(this.resourcePath || path).setCrossOrigin(this.crossOrigin);
+                    while (next) {
+                        if (next.id === MAT_MAPNAME) {
+                            const name = next.readString();
+                            texture = loader.load(name);
+                            this.debugMessage('      File: ' + path + name);
+                        }
+                        else {
+                            if (texture == null) {
+                                texture = new Texture();
+                            }
+                            if (next.id === MAT_MAP_UOFFSET) {
+                                texture.offset.x = next.readFloat();
+                                this.debugMessage('      OffsetX: ' + texture.offset.x);
+                            }
+                            else if (next.id === MAT_MAP_VOFFSET) {
+                                texture.offset.y = next.readFloat();
+                                this.debugMessage('      OffsetY: ' + texture.offset.y);
+                            }
+                            else if (next.id === MAT_MAP_USCALE) {
+                                texture.repeat.x = next.readFloat();
+                                this.debugMessage('      RepeatX: ' + texture.repeat.x);
+                            }
+                            else if (next.id === MAT_MAP_VSCALE) {
+                                texture.repeat.y = next.readFloat();
+                                this.debugMessage('      RepeatY: ' + texture.repeat.y);
+                            }
+                            else {
+                                this.debugMessage('      Unknown map chunk: ' + next.hexId);
+                            }
+                        }
+                        next = chunk.readChunk();
+                    }
+                    return texture;
+                }
+                readMaterialGroup(chunk) {
+                    const name = chunk.readString();
+                    const numFaces = chunk.readWord();
+                    this.debugMessage('         Name: ' + name);
+                    this.debugMessage('         Faces: ' + numFaces);
+                    const index = [];
+                    for (let i = 0; i < numFaces; ++i) {
+                        index.push(chunk.readWord());
+                    }
+                    return { name: name, index: index };
+                }
+                readColor(chunk) {
+                    const subChunk = chunk.readChunk();
+                    const color = new Color();
+                    if (subChunk.id === COLOR_24 || subChunk.id === LIN_COLOR_24) {
+                        const r = subChunk.readByte();
+                        const g = subChunk.readByte();
+                        const b = subChunk.readByte();
+                        color.setRGB(r / 255, g / 255, b / 255);
+                        this.debugMessage('      Color: ' + color.r + ', ' + color.g + ', ' + color.b);
+                    }
+                    else if (subChunk.id === COLOR_F || subChunk.id === LIN_COLOR_F) {
+                        const r = subChunk.readFloat();
+                        const g = subChunk.readFloat();
+                        const b = subChunk.readFloat();
+                        color.setRGB(r, g, b);
+                        this.debugMessage('      Color: ' + color.r + ', ' + color.g + ', ' + color.b);
+                    }
+                    else {
+                        this.debugMessage('      Unknown color chunk: ' + subChunk.hexId);
+                    }
+                    return color;
+                }
+                readPercentage(chunk) {
+                    const subChunk = chunk.readChunk();
+                    switch (subChunk.id) {
+                        case INT_PERCENTAGE:
+                            return (subChunk.readShort() / 100);
+                        case FLOAT_PERCENTAGE:
+                            return subChunk.readFloat();
+                        default:
+                            this.debugMessage('      Unknown percentage chunk: ' + subChunk.hexId);
+                            return 0;
+                    }
+                }
+                debugMessage(message) {
+                    if (this.debug) {
+                        console.log(message);
+                    }
                 }
             }
-            resources.Parser3DS = Parser3DS;
+            resources.Loader3DS = Loader3DS;
+            class Object3DS {
+                name;
+                mesh;
+                geometry;
+                matrix;
+                geometryVertices;
+                parent_index;
+                containsAnimationData;
+                pivot;
+                position;
+                rotation;
+                scale;
+                constructor(name) {
+                    this.name = name;
+                    this.mesh = null;
+                    this.geometry = null;
+                    this.matrix = new Matrix3DS();
+                    this.geometryVertices = [];
+                    this.parent_index = null;
+                    this.containsAnimationData = false;
+                    this.pivot = new Vector3DS();
+                    this.position = new Vector3DS();
+                    this.rotation = new Vector4DS();
+                    this.scale = new Vector3DS();
+                }
+            }
+            class Vector3DS {
+                x;
+                y;
+                z;
+                constructor(x = 0.0, y = 0.0, z = 0.0) {
+                    this.x = x;
+                    this.y = y;
+                    this.z = z;
+                }
+            }
+            class Vector4DS {
+                x;
+                y;
+                z;
+                w;
+                constructor(x = 0.0, y = 0.0, z = 0.0, w = 0.0) {
+                    this.x = x;
+                    this.y = y;
+                    this.z = z;
+                    this.w = w;
+                }
+            }
+            class Matrix3DS {
+                a;
+                e;
+                i;
+                b;
+                f;
+                j;
+                c;
+                g;
+                k;
+                d;
+                h;
+                l;
+                constructor() {
+                    this.a = 0.0;
+                    this.e = 0.0;
+                    this.i = 0.0;
+                    this.b = 0.0;
+                    this.f = 0.0;
+                    this.j = 0.0;
+                    this.c = 0.0;
+                    this.g = 0.0;
+                    this.k = 0.0;
+                    this.d = 0.0;
+                    this.h = 0.0;
+                    this.l = 0.0;
+                }
+            }
+            class Chunk {
+                data;
+                offset;
+                position;
+                debugMessage;
+                id;
+                size;
+                end;
+                constructor(data, position, debugMessage) {
+                    this.data = data;
+                    this.offset = position;
+                    this.position = position;
+                    this.debugMessage = debugMessage;
+                    if (this.debugMessage instanceof Function) {
+                        this.debugMessage = function () {
+                        };
+                    }
+                    this.id = this.readWord();
+                    this.size = this.readDWord();
+                    this.end = this.offset + this.size;
+                    if (this.end > data.byteLength) {
+                        this.debugMessage('Bad chunk size for chunk at ' + position);
+                    }
+                }
+                readChunk() {
+                    if (this.endOfChunk) {
+                        return null;
+                    }
+                    try {
+                        const next = new Chunk(this.data, this.position, this.debugMessage);
+                        this.position += next.size;
+                        return next;
+                    }
+                    catch (e) {
+                        this.debugMessage('Unable to read chunk at ' + this.position);
+                        return null;
+                    }
+                }
+                get hexId() {
+                    return this.id.toString(16);
+                }
+                get endOfChunk() {
+                    return this.position >= this.end;
+                }
+                readByte() {
+                    const v = this.data.getUint8(this.position);
+                    this.position += 1;
+                    return v;
+                }
+                readFloat() {
+                    try {
+                        const v = this.data.getFloat32(this.position, true);
+                        this.position += 4;
+                        return v;
+                    }
+                    catch (e) {
+                        this.debugMessage(e + ' ' + this.position + ' ' + this.data.byteLength);
+                        return 0;
+                    }
+                }
+                readInt() {
+                    const v = this.data.getInt32(this.position, true);
+                    this.position += 4;
+                    return v;
+                }
+                readShort() {
+                    const v = this.data.getInt16(this.position, true);
+                    this.position += 2;
+                    return v;
+                }
+                readDWord() {
+                    const v = this.data.getUint32(this.position, true);
+                    this.position += 4;
+                    return v;
+                }
+                readWord() {
+                    const v = this.data.getUint16(this.position, true);
+                    this.position += 2;
+                    return v;
+                }
+                readString() {
+                    let s = '';
+                    let c = this.readByte();
+                    while (c) {
+                        s += String.fromCharCode(c);
+                        c = this.readByte();
+                    }
+                    return s;
+                }
+            }
         })(resources = engine.resources || (engine.resources = {}));
     })(engine = gameengine.engine || (gameengine.engine = {}));
 })(gameengine || (gameengine = {}));
@@ -1092,53 +1220,46 @@ var gameengine;
             var GameObject = gameengine.gameObject.GameObject;
             var MeshRenderer = gameengine.engine.components.MeshRenderer;
             var Mesh = THREE.Mesh;
-            var ObjectLoader = THREE.ObjectLoader;
+            var Transform3D = gameengine.engine.components.Transform3D;
             class MeshLoader {
+                static loader3DS = new resources.Loader3DS();
+                static loaderFBX = new FBXLoader();
                 static loadMesh(type, url, callback) {
                     const meshObject = new GameObject();
+                    meshObject.addComponent(Transform3D).setNewObject3D();
                     switch (type) {
                         case "3ds":
-                            this.parser3ds.load(url, (objects) => this.onObjectsLoaded(objects, meshObject, callback), undefined, this.onError);
+                            this.loader3DS.load(url, (object3d) => this.onObjectsLoaded(object3d, meshObject, callback), undefined, this.onError);
                             break;
-                        default:
-                            this.objectLoader.load(url, (object) => this.onObjectsLoaded([object], meshObject, callback));
+                        case "fbx":
+                            this.loaderFBX.load(url, (object3d) => this.onObjectsLoaded(object3d, meshObject, callback), undefined, this.onError);
                             break;
                     }
                 }
-                static onObjectsLoaded(objects, gameObject, callback) {
-                    let mainReady = false;
-                    for (let object of objects) {
-                        if (object instanceof Mesh) {
-                            if (!mainReady) {
-                                this.createMeshRendererFromMesh3D(gameObject, object);
-                            }
-                            else {
-                                this.createChildGameObjectFromMesh(gameObject, object);
-                            }
-                        }
-                        object.traverse((child) => {
-                            if (child != object && child instanceof Mesh) {
-                                this.createChildGameObjectFromMesh(gameObject, child);
-                            }
-                        });
-                    }
+                static onObjectsLoaded(object3d, gameObject, callback) {
+                    this.traverseAndBuildTree(object3d, gameObject);
                     callback(gameObject);
                 }
-                static createChildGameObjectFromMesh(parentObject, mesh) {
-                    const childObject = new GameObject();
-                    parentObject.addChild(childObject);
-                    this.createMeshRendererFromMesh3D(childObject, mesh);
-                }
-                static createMeshRendererFromMesh3D(object3d, mesh) {
-                    const meshRenderer = object3d.addComponent(MeshRenderer);
-                    meshRenderer.initGeometry(mesh.geometry);
+                static traverseAndBuildTree(parent3d, mainObject) {
+                    parent3d.traverse((object3d) => {
+                        if (object3d == parent3d)
+                            return;
+                        const gameObject = new GameObject();
+                        mainObject.addChild(gameObject);
+                        if (object3d instanceof Mesh) {
+                            const meshRenderer = gameObject.addComponent(MeshRenderer);
+                            meshRenderer.initGeometry(object3d.geometry);
+                        }
+                        else {
+                            gameObject.addComponent(Transform3D).setObject3D(object3d);
+                        }
+                        this.traverseAndBuildTree(object3d, gameObject);
+                    });
                 }
                 static onError(error) {
                     throw new Error(String(error));
                 }
             }
-            MeshLoader.parser3ds = new resources.Parser3DS();
-            MeshLoader.objectLoader = new ObjectLoader();
             resources.MeshLoader = MeshLoader;
         })(resources = engine.resources || (engine.resources = {}));
     })(engine = gameengine.engine || (gameengine.engine = {}));

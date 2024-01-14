@@ -1,4 +1,5 @@
-///<reference path="Parser3DS.ts"/>
+///<reference path="Loader3DS.ts"/>
+
 module gameengine.engine.resources
 {
     import IGameObject = gameengine.gameObject.IGameObject;
@@ -6,66 +7,59 @@ module gameengine.engine.resources
     import MeshRenderer = gameengine.engine.components.MeshRenderer;
     import Object3D = THREE.Object3D;
     import Mesh = THREE.Mesh;
+    import Group = THREE.Group;
+    import Transform3D = gameengine.engine.components.Transform3D;
+    import ObjectLoader = THREE.ObjectLoader;
 
     export class MeshLoader
     {
-        private static readonly parser3ds:Parser3DS = new Parser3DS();
-        private static readonly parserFBX:FBXLoader;
+        private static readonly loader3DS:Loader3DS = new Loader3DS();
+        private static readonly loaderFBX:FBXLoader = new FBXLoader();
 
         public static loadMesh(type:"3ds"|"fbx", url:string, callback:(meshObject:IGameObject)=>void) : void
         {
             const meshObject:IGameObject = new GameObject();
+            meshObject.addComponent(Transform3D).setNewObject3D();
 
             switch (type)
             {
                 case "3ds":
-                    this.parser3ds.load(url,(objects:Mesh[])=>this.onObjectsLoaded(objects,meshObject,callback),undefined,this.onError);
+                    this.loader3DS.load(url,(object3d:Object3D)=>this.onObjectsLoaded(object3d,meshObject,callback),undefined,this.onError);
                     break;
                 case "fbx":
-                    this.objectLoader.load(url, (object:Object3D)=>this.onObjectsLoaded([object],meshObject,callback));
+                    this.loaderFBX.load(url, (object3d:Object3D)=>this.onObjectsLoaded(object3d,meshObject,callback),undefined,this.onError);
                     break;
             }
         }
-        private static onObjectsLoaded(objects:Object3D[], gameObject:IGameObject, callback:(meshObject:IGameObject)=>void) : void {
+        private static onObjectsLoaded(object3d:Object3D, gameObject:IGameObject, callback:(meshObject:IGameObject)=>void) : void {
 
-            //TODO: rewrite 3dsLoader. it not load parent tree
-
-            let mainReady:boolean = false;
-
-            for(let object of objects)
-            {
-                if(object instanceof Mesh)
-                {
-                    if(!mainReady)
-                    {
-                        this.createMeshRendererFromMesh3D(gameObject, object);
-                    }
-                    else
-                    {
-                        this.createChildGameObjectFromMesh(gameObject, object);
-                    }
-                }
-                object.traverse((child:Object3D)=>{
-                   if(child != object && child instanceof Mesh)
-                   {
-                        this.createChildGameObjectFromMesh(gameObject, child);
-                   }
-                });
-            }
+            this.traverseAndBuildTree(object3d, gameObject);
 
             callback(gameObject);
         }
 
-        private static createChildGameObjectFromMesh(parentObject:IGameObject, mesh:Mesh) : void
+        private static traverseAndBuildTree(parent3d:Object3D, mainObject:IGameObject) : void
         {
-            const childObject:IGameObject = new GameObject();
-            parentObject.addChild(childObject);
-            this.createMeshRendererFromMesh3D(childObject, mesh as Mesh);
-        }
-        private static createMeshRendererFromMesh3D(object3d:IGameObject, mesh:Mesh) : void
-        {
-            const meshRenderer:MeshRenderer = object3d.addComponent(MeshRenderer);
-            meshRenderer.initGeometry(mesh.geometry);
+            parent3d.traverse((object3d:Object3D):void => {
+                if(object3d == parent3d) //I don't know is Object3D.traverse returns object itself
+                    return;
+
+                const gameObject:IGameObject = new GameObject();
+
+                mainObject.addChild(gameObject);
+
+                if(object3d instanceof Mesh)
+                {
+                    const meshRenderer:MeshRenderer = gameObject.addComponent(MeshRenderer);
+                    meshRenderer.initGeometry(object3d.geometry);
+                }
+                else
+                {
+                    gameObject.addComponent(Transform3D).setObject3D(object3d);
+                }
+
+                this.traverseAndBuildTree(object3d, gameObject);
+            });
         }
 
         private static onError(error:unknown) : void

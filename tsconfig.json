@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "module": "system",
-    "target": "es6",
+    "target": "es2022",
     "sourceMap": true,
     "outFile": "build/lib.js",
     "declaration": true,

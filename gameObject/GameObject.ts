@@ -142,6 +142,10 @@ module gameengine.gameObject {
             for (let component of this._components) {
                 component.update(deltaMs);
             }
+
+            for (let child of this._children) {
+                (child as GameObject).sceneUpdate(deltaMs);
+            }
         }
 
     }

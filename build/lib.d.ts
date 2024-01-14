@@ -181,55 +181,44 @@ declare namespace gameengine.engine.components {
     }
 }
 declare namespace gameengine.engine.resources {
-    import Mesh = THREE.Mesh;
-    import Object3D = THREE.Object3D;
-    class Parser3DS {
-        private objectDatas;
-        private animationDatas;
-        private materialDatas;
-        private objects;
-        private parents;
+    import Loader = THREE.Loader;
+    import LoadingManager = THREE.LoadingManager;
+    import Group = THREE.Group;
+    class Loader3DS extends Loader {
+        private readonly debug;
+        private group;
         private materials;
-        private textureMaterials;
-        private data;
-        private dataView;
-        constructor();
-        load(url: string, onLoad: (objects: Object3D[]) => void, onProgress?: (data: (ProgressEvent<EventTarget>)) => void, onError?: (error: unknown) => void): void;
-        parse(data: any): Mesh[];
-        private parse3DSChunk;
-        private readChunkInfo;
-        private parseMainChunk;
-        private parse3DChunk;
-        private parseMaterialChunk;
-        private parseMaterialName;
-        private getString;
-        private parseMapChunk;
-        private parseObject;
-        private parseObjectChunk;
-        private parseMeshChunk;
-        private parseVertices;
-        private parseUVs;
-        private parseMatrix;
-        private parseFaces;
-        private parseFacesChunk;
-        private parseSurface;
-        private parseSmoothingGroups;
-        private parseAnimationChunk;
-        private parseObjectAnimationChunk;
-        private getRotationFrom3DSAngleAxis;
-        private buildContent;
-        private buildMesh;
+        private _3DSObjectsByName;
+        constructor(debug?: boolean, manager?: LoadingManager);
+        load(url: string, onLoad: (group: Group) => void, onProgress: (event: ProgressEvent) => void, onError: (error: unknown) => void): void;
+        parse(arraybuffer: ArrayBuffer, path: string): Group;
+        private readFile;
+        private object3DSDataToThreejsMesh;
+        private correctMatrix;
+        private readAnimationData;
+        private readObjectNode;
+        private readObjectHierarchy;
+        private readObjectName;
+        private readMeshData;
+        private readNamedObject;
+        private readMaterialEntry;
+        private readMesh;
+        private readFaceArray;
+        private readMap;
+        private readMaterialGroup;
+        private readColor;
+        private readPercentage;
+        private debugMessage;
     }
 }
 declare namespace gameengine.engine.resources {
     import IGameObject = gameengine.gameObject.IGameObject;
     class MeshLoader {
-        private static readonly parser3ds;
-        private static readonly objectLoader;
+        private static readonly loader3DS;
+        private static readonly loaderFBX;
         static loadMesh(type: "3ds" | "fbx", url: string, callback: (meshObject: IGameObject) => void): void;
         private static onObjectsLoaded;
-        private static createChildGameObjectFromMesh;
-        private static createMeshRendererFromMesh3D;
+        private static traverseAndBuildTree;
         private static onError;
     }
 }

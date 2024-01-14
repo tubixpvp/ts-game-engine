@@ -18,6 +18,12 @@ module gameengine.engine.components {
         public setObject3D(object3d: Object3D): void {
             this.object3d = object3d;
             this.object3d.userData = this;
+
+            this.position.copy(object3d.position);
+            this.rotation.x = object3d.rotation.x;
+            this.rotation.y = object3d.rotation.y;
+            this.rotation.z = object3d.rotation.z;
+
             this.onParentChanged();
         }
 
